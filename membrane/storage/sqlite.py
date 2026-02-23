@@ -223,17 +223,6 @@ class SQLiteStorage:
                 return d
             return None
 
-    def search_temp_fts(self, query: str, limit: int = 200) -> List[Dict[str, Any]]:
-        # FTS5 query syntax
-        # We also need to filter by scope, but FTS5 supports UNINDEXED columns which can be used in WHERE?
-        # Yes, UNINDEXED columns can be used in queries but are not full-text indexed.
-        pass
-        # Actually, I'll implement a method that takes additional WHERE clauses or scope parameters
-        # But retrieval logic usually handles the FTS query construction.
-        # I'll expose a raw query method or a structured one.
-        # For strict isolation, I should probably enforce scope here?
-        # But `retrieval.py` handles the logic. I'll provide a generic query method.
-
     def fetch_all_kb_items(self) -> List[Dict[str, Any]]:
         """Used for reindexing."""
         items = []

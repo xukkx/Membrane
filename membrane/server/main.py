@@ -43,18 +43,6 @@ retrieval = RetrievalEngine(sqlite, ram)
 
 mcp = FastMCP("membrane")
 
-# Stable mapping for environments where dotted names are unsupported.
-TOOL_NAME_ALIASES = {
-    "temp.add_event": "temp_add_event",
-    "temp.search": "temp_search",
-    "proj_kb.promote": "proj_kb_promote",
-    "proj_kb.commit": "proj_kb_commit",
-    "proj_kb.search": "proj_kb_search",
-    "behavior.read_policy": "behavior_read_policy",
-    "maintenance.flush": "maintenance_flush",
-    "maintenance.reindex": "maintenance_reindex",
-}
-
 @mcp.tool(name="temp.add_event")
 async def add_event(scope: Scope, event: Event) -> Dict[str, Any]:
     """Add a temporary event. Ensure event.scope matches the provided scope."""

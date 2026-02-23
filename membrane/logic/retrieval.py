@@ -18,9 +18,10 @@ class RetrievalEngine:
     def _fusion_score(self, lex_score: float, vec_score: float, item: Dict[str, Any]) -> float:
         w = self.policy.weights
 
-        # Base score from vector (cosine)
-        # We ignore lex_score (FTS rank) for now as normalization is hard without global context
-        base = w.get('w_vec', 0.7) * vec_score
+        # Hybrid base score: lexical + vector
+        # FTS rank is better when smaller, normalize to (0, 1] so higher is better.
+        lex = 1.0 / (1.0 + max(0.0, lex_score))
+        base = (w.get('w_lex', 0.3) * lex) + (w.get('w_vec', 0.7) * vec_score)
 
         # Bonuses
         bonus = 0.0
@@ -85,7 +86,7 @@ class RetrievalEngine:
                 # vec is (384,), query_vec is (1, 384)
                 cosine = float(np.dot(query_vec, vec).flatten()[0])
 
-            score = self._fusion_score(0.0, cosine, cand)
+            score = self._fusion_score(float(cand.get('fts_rank', 0.0)), cosine, cand)
             scored.append((score, cand, cosine))
 
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -135,7 +136,7 @@ class RetrievalEngine:
             if vec is not None and query_vec.size > 0:
                 cosine = float(np.dot(query_vec, vec).flatten()[0])
 
-            score = self._fusion_score(0.0, cosine, cand)
+            score = self._fusion_score(float(cand.get('fts_rank', 0.0)), cosine, cand)
             scored.append((score, cand, cosine))
 
         scored.sort(key=lambda x: x[0], reverse=True)
