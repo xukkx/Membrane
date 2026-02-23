@@ -65,7 +65,7 @@ def setup():
     ingestion = IngestionEngine(sqlite, jsonl, ram)
     retrieval = RetrievalEngine(sqlite, ram)
 
-    return ingestion, retrieval, ram, sqlite
+    return ingestion, retrieval, ram, sqlite, use_mock
 
 def test_positive_flow(ingestion, retrieval):
     logger.info("Testing Positive Flow...")
@@ -178,7 +178,7 @@ def test_idempotency_and_conflict(ingestion, retrieval):
     assert curr["confidence"] == 0.6 # Unchanged
     assert "e2" in curr["provenance_event_ids"] # Merged
 
-def test_persistence():
+def test_persistence(use_mock: bool = False):
     logger.info("Testing Persistence...")
     # Teardown and Re-init
     # Assuming setup() created DB on disk.
@@ -187,10 +187,9 @@ def test_persistence():
     sqlite = SQLiteStorage(db_path)
     ram = RAMStorage(sqlite)
 
-    # Use Mock if needed (should match what setup used if we want exact results but mock uses hash(text) seed so deterministic)
-    # If environment variable set, use it.
-    use_mock = os.environ.get("MEMBRANE_TEST_MOCK_EMBEDDING", "0") == "1"
+    # Reuse whichever embedding mode setup() selected so persistence test works in offline environments.
     if use_mock:
+        logger.info("Using MockEmbeddingModel for persistence verification.")
         ram._model = MockEmbeddingModel()
 
     ram.rebuild_index()
@@ -206,13 +205,13 @@ def test_persistence():
 
 if __name__ == "__main__":
     try:
-        ingestion, retrieval, ram, sqlite = setup()
+        ingestion, retrieval, ram, sqlite, use_mock = setup()
         test_positive_flow(ingestion, retrieval)
         test_isolation(ingestion, retrieval)
         test_idempotency_and_conflict(ingestion, retrieval)
 
         # Persistence test requires re-init
-        test_persistence()
+        test_persistence(use_mock=use_mock)
 
         print("ALL TESTS PASSED")
     except Exception as e:

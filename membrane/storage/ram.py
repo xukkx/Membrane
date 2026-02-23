@@ -12,15 +12,22 @@ class RAMStorage:
         self.model_name = embedding_model_name
         self._model = None
 
+        # Embedding dimensionality is inferred dynamically from model output.
+        self._vector_dim: Optional[int] = None
+
         # Temp vectors
-        self.temp_vectors = np.empty((0, 384)) # shape (N, D)
+        self.temp_vectors = self._empty_vectors()  # shape (N, D)
         self.temp_id_to_index: Dict[str, int] = {}
         self.temp_index_to_id: Dict[int, str] = {}
 
         # KB vectors
-        self.kb_vectors = np.empty((0, 384))
+        self.kb_vectors = self._empty_vectors()
         self.kb_id_to_index: Dict[str, int] = {}
         self.kb_index_to_id: Dict[int, str] = {}
+
+    def _empty_vectors(self) -> np.ndarray:
+        dim = self._vector_dim or 0
+        return np.empty((0, dim), dtype=np.float32)
 
     @property
     def model(self):
@@ -31,8 +38,20 @@ class RAMStorage:
 
     def encode(self, texts: List[str]) -> np.ndarray:
         if not texts:
-            return np.empty((0, 384))
-        embeddings = self.model.encode(texts)
+            return self._empty_vectors()
+
+        embeddings = np.asarray(self.model.encode(texts), dtype=np.float32)
+        if embeddings.ndim == 1:
+            embeddings = embeddings.reshape(1, -1)
+
+        if self._vector_dim is None:
+            self._vector_dim = embeddings.shape[1]
+            # Reinitialize empty stores to match inferred dimension.
+            if self.temp_vectors.shape[0] == 0:
+                self.temp_vectors = self._empty_vectors()
+            if self.kb_vectors.shape[0] == 0:
+                self.kb_vectors = self._empty_vectors()
+
         # Normalize embeddings for cosine similarity
         norm = np.linalg.norm(embeddings, axis=1, keepdims=True)
         return embeddings / (norm + 1e-9)
@@ -51,7 +70,7 @@ class RAMStorage:
             self.temp_id_to_index = {eid: i for i, eid in enumerate(ids)}
             self.temp_index_to_id = {i: eid for i, eid in enumerate(ids)}
         else:
-            self.temp_vectors = np.empty((0, 384))
+            self.temp_vectors = self._empty_vectors()
             self.temp_id_to_index = {}
             self.temp_index_to_id = {}
 
@@ -66,7 +85,7 @@ class RAMStorage:
             self.kb_id_to_index = {kid: i for i, kid in enumerate(kb_ids)}
             self.kb_index_to_id = {i: kid for i, kid in enumerate(kb_ids)}
         else:
-            self.kb_vectors = np.empty((0, 384))
+            self.kb_vectors = self._empty_vectors()
             self.kb_id_to_index = {}
             self.kb_index_to_id = {}
 
@@ -75,12 +94,9 @@ class RAMStorage:
     def add_temp_event(self, event_id: str, search_text: str):
         vector = self.encode([search_text])
         if event_id in self.temp_id_to_index:
-            # Update existing? (Temp events usually immutable but strictly speaking...)
-            # Since strict immutability for temp events is mostly true, but let's handle update just in case.
             idx = self.temp_id_to_index[event_id]
-            self.temp_vectors[idx] = vector
+            self.temp_vectors[idx] = vector[0]
         else:
-            # Append
             if self.temp_vectors.shape[0] == 0:
                 self.temp_vectors = vector
             else:
@@ -93,7 +109,7 @@ class RAMStorage:
         vector = self.encode([search_text])
         if kb_item_id in self.kb_id_to_index:
             idx = self.kb_id_to_index[kb_item_id]
-            self.kb_vectors[idx] = vector
+            self.kb_vectors[idx] = vector[0]
         else:
             if self.kb_vectors.shape[0] == 0:
                 self.kb_vectors = vector

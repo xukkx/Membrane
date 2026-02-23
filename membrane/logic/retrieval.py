@@ -73,6 +73,10 @@ class RetrievalEngine:
                     continue
                 if filters.entities and not any(e in cand['entities'] for e in filters.entities):
                     continue
+                if filters.thread_id and cand['scope'].get('thread_id') != filters.thread_id:
+                    continue
+                if filters.task_id and cand['scope'].get('task_id') != filters.task_id:
+                    continue
 
             # Get vector
             vec = self.ram.get_temp_vector(cand['event_id'])
