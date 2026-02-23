@@ -79,6 +79,12 @@ class SQLiteStorage:
                 )
             """)
 
+            # Explicit unique index for clarity/readability
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_items_unique_id
+                ON kb_items (kb_item_id)
+            """)
+
             # FTS5 for temp_events
             # Using external content tables is cleaner but manual sync is also fine.
             # I'll stick to manual sync for explicit control.

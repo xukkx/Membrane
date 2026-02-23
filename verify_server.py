@@ -3,6 +3,7 @@ import shutil
 import time
 import uuid
 import logging
+import numpy as np
 from membrane.models import Scope, Event, KBItem, SearchFilters
 from membrane.storage.sqlite import SQLiteStorage
 from membrane.storage.jsonl import JSONLStorage
@@ -16,6 +17,22 @@ logger = logging.getLogger("verify")
 
 TEST_DIR = "./test_membrane_data"
 
+class MockEmbeddingModel:
+    """Deterministic mock embedding model for offline/CI verification."""
+    def encode(self, texts):
+        res = []
+        for t in texts:
+            # Deterministic seed from text hash
+            seed = abs(hash(t)) % (2**32)
+            rng = np.random.default_rng(seed)
+            vec = rng.random(384).astype(np.float32)
+            # Normalize
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec = vec / norm
+            res.append(vec)
+        return np.array(res)
+
 def setup():
     if os.path.exists(TEST_DIR):
         shutil.rmtree(TEST_DIR)
@@ -27,6 +44,22 @@ def setup():
     sqlite = SQLiteStorage(db_path)
     jsonl = JSONLStorage(jsonl_path)
     ram = RAMStorage(sqlite)
+
+    # Try using real model, fallback to mock if download fails or env var set
+    use_mock = os.environ.get("MEMBRANE_TEST_MOCK_EMBEDDING", "0") == "1"
+
+    if not use_mock:
+        try:
+            # Attempt to load real model (triggers download)
+            _ = ram.model
+        except Exception as e:
+            logger.warning(f"Failed to load real embedding model ({e}). Falling back to MockEmbeddingModel.")
+            use_mock = True
+
+    if use_mock:
+        logger.info("Using MockEmbeddingModel for verification.")
+        ram._model = MockEmbeddingModel()
+
     ram.rebuild_index()
 
     ingestion = IngestionEngine(sqlite, jsonl, ram)
@@ -153,6 +186,13 @@ def test_persistence():
     db_path = os.path.join(TEST_DIR, "membrane.db")
     sqlite = SQLiteStorage(db_path)
     ram = RAMStorage(sqlite)
+
+    # Use Mock if needed (should match what setup used if we want exact results but mock uses hash(text) seed so deterministic)
+    # If environment variable set, use it.
+    use_mock = os.environ.get("MEMBRANE_TEST_MOCK_EMBEDDING", "0") == "1"
+    if use_mock:
+        ram._model = MockEmbeddingModel()
+
     ram.rebuild_index()
 
     retrieval = RetrievalEngine(sqlite, ram)
