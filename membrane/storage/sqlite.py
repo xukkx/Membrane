@@ -223,17 +223,6 @@ class SQLiteStorage:
                 return d
             return None
 
-    def search_temp_fts(self, query: str, limit: int = 200) -> List[Dict[str, Any]]:
-        # FTS5 query syntax
-        # We also need to filter by scope, but FTS5 supports UNINDEXED columns which can be used in WHERE?
-        # Yes, UNINDEXED columns can be used in queries but are not full-text indexed.
-        pass
-        # Actually, I'll implement a method that takes additional WHERE clauses or scope parameters
-        # But retrieval logic usually handles the FTS query construction.
-        # I'll expose a raw query method or a structured one.
-        # For strict isolation, I should probably enforce scope here?
-        # But `retrieval.py` handles the logic. I'll provide a generic query method.
-
     def fetch_all_kb_items(self) -> List[Dict[str, Any]]:
         """Used for reindexing."""
         items = []
@@ -286,12 +275,12 @@ class SQLiteStorage:
             # Usually strict MATCH ? is fine.
 
             sql = """
-                SELECT rank, rowid, * FROM temp_events_fts
+                SELECT bm25(temp_events_fts) AS fts_rank, rowid, * FROM temp_events_fts
                 WHERE temp_events_fts MATCH ?
                 AND project_id = ?
                 AND agent_id = ?
                 AND session_id = ?
-                ORDER BY rank
+                ORDER BY fts_rank ASC
                 LIMIT ?
             """
             cursor.execute(sql, (fts_query, project_id, agent_id, session_id, limit))
@@ -318,7 +307,7 @@ class SQLiteStorage:
                     }
                     d['tags'] = json.loads(d['tags_json']) if d['tags_json'] else []
                     d['entities'] = json.loads(d['entities_json']) if d['entities_json'] else []
-                    d['fts_rank'] = row['rank']
+                    d['fts_rank'] = row['fts_rank']
                     results.append(d)
             return results
 
@@ -328,10 +317,10 @@ class SQLiteStorage:
             cursor = conn.cursor()
 
             sql = """
-                SELECT rank, rowid, * FROM kb_items_fts
+                SELECT bm25(kb_items_fts) AS fts_rank, rowid, * FROM kb_items_fts
                 WHERE kb_items_fts MATCH ?
                 AND project_id = ?
-                ORDER BY rank
+                ORDER BY fts_rank ASC
                 LIMIT ?
             """
             cursor.execute(sql, (query, project_id, limit))
@@ -348,6 +337,6 @@ class SQLiteStorage:
                     d['provenance_event_ids'] = json.loads(d['provenance_json'])
                     d['conflicts_with'] = json.loads(d['conflicts_json']) if d['conflicts_json'] else []
                     d['supersedes'] = json.loads(d['supersedes_json']) if d['supersedes_json'] else []
-                    d['fts_rank'] = row['rank']
+                    d['fts_rank'] = row['fts_rank']
                     results.append(d)
             return results
