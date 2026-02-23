@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.membrane/
+test_membrane_data/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.env
+venv/
+membrane.db
+events.jsonl
