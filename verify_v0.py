@@ -218,14 +218,8 @@ def t_i4_deterministic_promotion(h: Harness):
     scope = Scope(project_id="p", agent_id="a", session_id="s")
     e1 = _mk_event(scope, "Summary: Deterministic text")
     h.ingestion.add_event(e1)
-    import membrane.logic.ingestion as ing_mod
-    orig_time = ing_mod.time.time
-    ing_mod.time.time = lambda: 1700000000.0
-    try:
-        p1 = h.ingestion.promote("p", [e1.event_id])
-        p2 = h.ingestion.promote("p", [e1.event_id])
-    finally:
-        ing_mod.time.time = orig_time
+    p1 = h.ingestion.promote("p", [e1.event_id])
+    p2 = h.ingestion.promote("p", [e1.event_id])
     _assert([x.model_dump() for x in p1] == [x.model_dump() for x in p2], "promotion not deterministic")
 
 

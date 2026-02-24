@@ -77,6 +77,8 @@ class IngestionEngine:
 
         summary_text = " ".join(parts)[:500]
 
+        base_ts = max(e["ts_epoch_ms"] for e in events)
+
         candidates = []
 
         # Summary item
@@ -90,7 +92,7 @@ class IngestionEngine:
             provenance_event_ids=sorted(source_event_ids),
             confidence=0.6,
             status="proposed",
-            ts_epoch_ms=int(time.time() * 1000)
+            ts_epoch_ms=base_ts
         ))
 
         # 3. Entity Candidates
@@ -114,7 +116,7 @@ class IngestionEngine:
                     provenance_event_ids=sorted(source_event_ids),
                     confidence=0.55,
                     status="proposed",
-                    ts_epoch_ms=int(time.time() * 1000)
+                    ts_epoch_ms=base_ts
                 ))
 
         for e in events:
