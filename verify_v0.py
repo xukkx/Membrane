@@ -103,7 +103,7 @@ def _mk_event(scope: Scope, text: str, type_: str = "obs", tags=None, entities=N
 
 
 def _tree_fingerprint() -> str:
-    """Best-effort deterministic fingerprint for zip/non-git environments."""
+    """Deterministic fingerprint immune to CRLF/LF and zip metadata drift."""
     tracked = [
         "membrane/storage/sqlite.py",
         "membrane/logic/retrieval.py",
@@ -113,15 +113,27 @@ def _tree_fingerprint() -> str:
         "verify_v0.py",
         "PATCH_NOTES.md",
     ]
+    # Sort to guarantee stable iteration order
+    tracked.sort()
+
     h = hashlib.sha256()
     for rel in tracked:
         if not os.path.exists(rel):
             continue
-        with open(rel, "rb") as f:
-            data = f.read()
+
+        # 1. Read as text with explicit UTF-8 encoding
+        with open(rel, "r", encoding="utf-8", errors="replace") as f:
+            raw_text = f.read()
+
+        # 2. Normalize Windows CRLF to Unix LF to prevent OS-level hash drift
+        normalized_text = raw_text.replace("\r\n", "\n")
+        data_bytes = normalized_text.encode("utf-8")
+
+        # 3. Hash path, exact normalized length, and the ENTIRE file content
         h.update(rel.encode("utf-8"))
-        h.update(str(len(data)).encode("utf-8"))
-        h.update(data[:200])
+        h.update(str(len(data_bytes)).encode("utf-8"))
+        h.update(data_bytes)
+
     return h.hexdigest()
 
 
