@@ -54,13 +54,28 @@ class IngestionEngine:
             return []
 
         # 2. Generate Summary Candidate
-        # Concatenate text with separators
-        full_text = " ... ".join([e['text'] for e in events])
-        # Clean boilerplate (simple heuristic: strip common prefixes? Spec says "strip boilerplate prefixes")
-        # For v0, simple strip/collapse whitespace.
-        cleaned_text = " ".join(full_text.split())
-        # Truncate to 500 chars
-        summary_text = cleaned_text[:500]
+        boilerplate_prefixes = [
+            "note:",
+            "summary:",
+            "observation:",
+            "context:",
+            "assistant:",
+            "user:",
+            "system:",
+        ]
+        parts = []
+        for e in events:
+            part = e['text'].lstrip()
+            lowered = part.lower()
+            for prefix in boilerplate_prefixes:
+                if lowered.startswith(prefix):
+                    part = part[len(prefix):].lstrip()
+                    break
+            normalized = " ".join(part.split())
+            if normalized:
+                parts.append(normalized)
+
+        summary_text = " ".join(parts)[:500]
 
         candidates = []
 

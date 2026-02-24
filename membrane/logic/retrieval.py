@@ -15,12 +15,11 @@ class RetrievalEngine:
         self.ram = ram
         self.policy = load_policy()
 
-    def _fusion_score(self, lex_score: float, vec_score: float, item: Dict[str, Any]) -> float:
+    def _fusion_score(self, lex_norm: float, vec_score: float, item: Dict[str, Any]) -> float:
         w = self.policy.weights
 
-        # Base score from vector (cosine)
-        # We ignore lex_score (FTS rank) for now as normalization is hard without global context
-        base = w.get('w_vec', 0.7) * vec_score
+        # Hybrid base score: lexical + vector.
+        base = (w.get('w_lex', 0.3) * lex_norm) + (w.get('w_vec', 0.7) * vec_score)
 
         # Bonuses
         bonus = 0.0
@@ -60,28 +59,37 @@ class RetrievalEngine:
         # 2. Vector Rerank
         query_vec = self.ram.encode([query])
 
-        scored = []
+        filtered = []
         for cand in candidates:
-            # Apply filters if any
             if filters:
-                # Type filter
                 if filters.type and cand['type'] != filters.type:
                     continue
-                # Tags/Entities not indexed in FTS directly for filtering?
-                # cand has tags/entities lists.
                 if filters.tags and not any(t in cand['tags'] for t in filters.tags):
                     continue
                 if filters.entities and not any(e in cand['entities'] for e in filters.entities):
                     continue
+                if filters.thread_id and cand['scope'].get('thread_id') != filters.thread_id:
+                    continue
+                if filters.task_id and cand['scope'].get('task_id') != filters.task_id:
+                    continue
+            filtered.append(cand)
 
-            # Get vector
+        scored = []
+        rank_pos = -1
+        last_fts_rank = None
+        for cand in filtered:
+            fts_rank = float(cand.get('fts_rank', 0.0))
+            if last_fts_rank is None or fts_rank != last_fts_rank:
+                rank_pos += 1
+                last_fts_rank = fts_rank
+
             vec = self.ram.get_temp_vector(cand['event_id'])
             cosine = 0.0
             if vec is not None and query_vec.size > 0:
-                # vec is (384,), query_vec is (1, 384)
                 cosine = float(np.dot(query_vec, vec).flatten()[0])
 
-            score = self._fusion_score(0.0, cosine, cand)
+            lex_norm = 1.0 / (1.0 + rank_pos)
+            score = self._fusion_score(lex_norm, cosine, cand)
             scored.append((score, cand, cosine))
 
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -118,20 +126,28 @@ class RetrievalEngine:
 
         query_vec = self.ram.encode([query])
 
-        scored = []
+        filtered = []
         for cand in candidates:
-            if filters:
-                if filters.status and cand['status'] != filters.status:
-                    continue
-                # KB Items don't strictly have tags/entities in top level, they are in content?
-                # or inferred. For now ignore tags/entities filter for KB unless mapped.
+            if filters and filters.status and cand['status'] != filters.status:
+                continue
+            filtered.append(cand)
+
+        scored = []
+        rank_pos = -1
+        last_fts_rank = None
+        for cand in filtered:
+            fts_rank = float(cand.get('fts_rank', 0.0))
+            if last_fts_rank is None or fts_rank != last_fts_rank:
+                rank_pos += 1
+                last_fts_rank = fts_rank
 
             vec = self.ram.get_kb_vector(cand['kb_item_id'])
             cosine = 0.0
             if vec is not None and query_vec.size > 0:
                 cosine = float(np.dot(query_vec, vec).flatten()[0])
 
-            score = self._fusion_score(0.0, cosine, cand)
+            lex_norm = 1.0 / (1.0 + rank_pos)
+            score = self._fusion_score(lex_norm, cosine, cand)
             scored.append((score, cand, cosine))
 
         scored.sort(key=lambda x: x[0], reverse=True)
