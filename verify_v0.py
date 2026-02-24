@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import platform
 import re
@@ -99,12 +100,43 @@ def _mk_event(scope: Scope, text: str, type_: str = "obs", tags=None, entities=N
     )
 
 
+
+
+def _tree_fingerprint() -> str:
+    """Best-effort deterministic fingerprint for zip/non-git environments."""
+    tracked = [
+        "membrane/storage/sqlite.py",
+        "membrane/logic/retrieval.py",
+        "membrane/logic/ingestion.py",
+        "membrane/storage/ram.py",
+        "membrane/server/main.py",
+        "verify_v0.py",
+        "PATCH_NOTES.md",
+    ]
+    h = hashlib.sha256()
+    for rel in tracked:
+        if not os.path.exists(rel):
+            continue
+        with open(rel, "rb") as f:
+            data = f.read()
+        h.update(rel.encode("utf-8"))
+        h.update(str(len(data)).encode("utf-8"))
+        h.update(data[:200])
+    return h.hexdigest()
+
+
 def print_env_header():
     import subprocess
 
-    branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    status = subprocess.check_output(["git", "status", "--short", "--branch"], text=True).strip()
+    branch = "UNKNOWN"
+    head = "UNKNOWN"
+    status = "UNKNOWN (non-git artifact or git unavailable)"
+    try:
+        branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip() or "DETACHED"
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        status = subprocess.check_output(["git", "status", "--short", "--branch"], text=True).strip()
+    except Exception:
+        pass
 
     conn = sqlite3.connect(":memory:")
     cur = conn.cursor()
@@ -129,6 +161,7 @@ def print_env_header():
     print(f"SQLITE_VERSION={sqlite_ver}")
     print(f"SQLITE_ENABLE_FTS5={fts5_enabled}")
     print(f"SQLITE_FTS5_PROBE={'PASS' if fts5_probe_ok else 'FAIL'}")
+    print(f"ARTIFACT_FINGERPRINT={_tree_fingerprint()}")
     print("EMBEDDING_MODE=mock")
 
 
